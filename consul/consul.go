@@ -10,7 +10,6 @@ import (
 
 	"github.com/gliderlabs/registrator/bridge"
 	consulapi "github.com/hashicorp/consul/api"
-	"github.com/hashicorp/go-cleanhttp"
 )
 
 const DefaultInterval = "10s"
@@ -78,15 +77,31 @@ func (r *ConsulAdapter) Ping() error {
 }
 
 func (r *ConsulAdapter) Register(service *bridge.Service) error {
-	registration := new(consulapi.AgentServiceRegistration)
-	registration.ID = service.ID
-	registration.Name = service.Name
-	registration.Port = service.Port
-	registration.Tags = service.Tags
-	registration.Address = service.IP
-	registration.Check = r.buildCheck(service)
-	registration.Meta = service.Attrs
-	return r.client.Agent().ServiceRegister(registration)
+	serviceAlreadyExists := false
+	registeredServices, err := r.Services()
+	if err != nil {
+		log.Println("query for consul services failed", err)
+	} else {
+		for _, AgentService := range registeredServices {
+			if service.ID == AgentService.ID {
+				serviceAlreadyExists = true
+				break
+			}
+		}
+	}
+	if !serviceAlreadyExists {
+		registration := new(consulapi.AgentServiceRegistration)
+		registration.ID = service.ID
+		registration.Name = service.Name
+		registration.Port = service.Port
+		registration.Tags = service.Tags
+		registration.Address = service.IP
+		registration.Check = r.buildCheck(service)
+		registration.Meta = service.Attrs
+		return r.client.Agent().ServiceRegister(registration)
+	} else {
+		return nil
+	}
 }
 
 func (r *ConsulAdapter) buildCheck(service *bridge.Service) *consulapi.AgentServiceCheck {
